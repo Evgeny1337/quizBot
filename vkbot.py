@@ -55,11 +55,12 @@ def handle_answer(vk, user_id, r, quiz, text, keyboard):
 def main():
     load_dotenv(override=True)
     vk_token = os.getenv('VK_TOKEN')
+    quiz_path = os.getenv('QUIZ_PATH')
     vk_session = VkApi(token=vk_token)
     vk = vk_session.get_api()
     longpoll = VkLongPoll(vk_session)
     r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    quiz = create_quiz_questions()
+    quiz = create_quiz_questions(quiz_path)
 
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:

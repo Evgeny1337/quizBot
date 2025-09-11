@@ -72,7 +72,8 @@ def main():
     r.flushall()
     tg_token = os.getenv('TG_TOKEN')
     updater = Updater(tg_token, use_context=True)
-    quiz = create_quiz_questions()
+    quiz_path = os.getenv('QUIZ_PATH')
+    quiz = create_quiz_questions(quiz_path)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_handler)],

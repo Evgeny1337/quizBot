@@ -1,11 +1,9 @@
 import os
 
 
-def create_quiz_questions():
+def create_quiz_questions(quiz_path):
     quiz = []
-    dirpath = os.path.join(os.getcwd(), 'quiz')
-    file = os.path.join(dirpath, '3f15.txt')
-    with open(file, 'r', encoding='KOI8-R') as file:
+    with open(quiz_path, 'r', encoding='KOI8-R') as file:
         content = file.read().split('\n\n')
     question = ''
     for text in content:
