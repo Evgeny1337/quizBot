@@ -1,10 +1,12 @@
+import json
 import os
-
+import random
 import redis
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, ConversationHandler
 from quiz_generator import create_quiz_questions
+from redis_utils import get_new_question, check_answer, check_score, get_last_question_info
 
 QUESTION, ANSWER = range(2)
 
@@ -18,32 +20,24 @@ def start_handler(update: Update, context: CallbackContext):
     return QUESTION
 
 def handle_new_question_request(update: Update, context: CallbackContext):
-    quiz = context.bot_data['quiz']
     redis_connect = context.bot_data['redis_connect']
+
     user_id = int(update.message.from_user.id)
-    if redis_connect.exists(user_id):
-        question_number = int(redis_connect.get(user_id))
-        if question_number + 1 >= len(quiz):
-            update.message.reply_text('Вопросы закончились')
-        else:
-            question = quiz[question_number + 1][0]
-            redis_connect.set(user_id, question_number + 1)
-            update.message.reply_text(question)
-    else:
-        question = quiz[0][0]
-        redis_connect.set(user_id, 0)
-        update.message.reply_text(question)
+    new_question = get_new_question(redis_connect, user_id)
+
+    question = new_question['question']
+    update.message.reply_text(question)
 
     return ANSWER
 
 def handle_solution_attempt(update: Update, context: CallbackContext):
     user_answer = update.message.text
     redis_connect = context.bot_data['redis_connect']
-    quiz = context.bot_data['quiz']
-    user_id = update.message.from_user.id
-    question_number = redis_connect.get(user_id)
-    answer = quiz[question_number][1]
-    if user_answer == answer:
+
+    user_id = int(update.message.from_user.id)
+    answer_result = check_answer(redis_connect, user_id, user_answer)
+
+    if answer_result:
         update.message.reply_text('Правильно! Поздравляю! Для следующего вопроса нажми «Новый вопрос')
         return QUESTION
     else:
@@ -51,38 +45,58 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
         return ANSWER
 
 
+
 def handle_get_score(update: Update, context: CallbackContext):
-    update.message.reply_text('Сколько-то очков')
+    redis_connect = context.bot_data['redis_connect']
+    user_id = int(update.message.from_user.id)
+
+    score_result = check_score(redis_connect, user_id)
+    good_score = score_result['redis_user_good_answer']
+    bad_score = score_result['redis_user_bad_answer']
+
+    answer = 'Количество правильных ответов: {}\n\nКоличество неверных ответов: {}\n\n'.format(good_score['score'], bad_score['score'])
+    update.message.reply_text(answer)
+    update.message.reply_text('Игра закончена, введите команду /start, чтобы начать')
+
+    return ConversationHandler.END
+
 
 def handle_give_up(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
-    quiz = context.bot_data['quiz']
+
     user_id = int(update.message.from_user.id)
-    question_number = int(redis_connect.get(user_id))
-    answer = quiz[question_number][1]
-    next_question = quiz[question_number + 1][0]
-    redis_connect.set(user_id, question_number + 1)
-    update.message.reply_text(answer)
-    update.message.reply_text(next_question)
-    return QUESTION
+    redis_question = get_last_question_info(redis_connect, user_id)
+
+    answer = redis_question['answer']
+    update.message.reply_text("Ответ на предыдущий вопрос: {}".format(answer))
+
+    check_answer(redis_connect, user_id, False)
+
+    new_question = get_new_question(redis_connect, user_id)
+    question = new_question['question']
+    update.message.reply_text("Новый вопрос: {}".format(question))
+
+    return ANSWER
 
 def main():
     load_dotenv()
-    r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    r.flushall()
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    redis_client.flushall()
     tg_token = os.getenv('TG_TOKEN')
     updater = Updater(tg_token, use_context=True)
     quiz_path = os.getenv('QUIZ_PATH')
-    quiz = create_quiz_questions(quiz_path)
+    create_quiz_questions(quiz_path,redis_client)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_handler)],
 
         states={
-            QUESTION: [MessageHandler(Filters.regex(r'^Новый вопрос'), handle_new_question_request),
-                       MessageHandler(Filters.regex(r'Сдаться'), handle_give_up)],
+            QUESTION: [MessageHandler(Filters.regex(r'^Мой счет'), handle_get_score),
+                       MessageHandler(Filters.regex(r'^Новый вопрос'), handle_new_question_request),
+                       MessageHandler(Filters.regex(r'^Сдаться'), handle_give_up)],
 
-            ANSWER: [MessageHandler(Filters.regex(r'Сдаться'), handle_give_up)
+            ANSWER: [MessageHandler(Filters.regex(r'^Мой счет'), handle_get_score),
+                     MessageHandler(Filters.regex(r'^Сдаться'), handle_give_up)
                     ,MessageHandler(Filters.text, handle_solution_attempt)]
         },
 
@@ -93,8 +107,7 @@ def main():
     )
     dispatcher = updater.dispatcher
     dispatcher.add_handler(conv_handler)
-    dispatcher.bot_data['redis_connect'] = r
-    dispatcher.bot_data['quiz'] = quiz
+    dispatcher.bot_data['redis_connect'] = redis_client
 
     updater.start_polling()
 
