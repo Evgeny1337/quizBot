@@ -26,7 +26,7 @@ def handle_new_question_request(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
 
     user_id = int(update.message.from_user.id)
-    new_question = get_new_question(redis_connect, user_id)
+    new_question = get_new_question(redis_connect, user_id, 'tg')
 
     question = new_question['question']
     update.message.reply_text(question)
@@ -39,7 +39,7 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
 
     user_id = int(update.message.from_user.id)
-    answer_result = check_answer(redis_connect, user_id, user_answer)
+    answer_result = check_answer(redis_connect, user_id, user_answer, 'tg')
 
     if answer_result:
         update.message.reply_text(
@@ -55,7 +55,7 @@ def handle_get_score(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
     user_id = int(update.message.from_user.id)
 
-    score_result = check_score(redis_connect, user_id)
+    score_result = check_score(redis_connect, user_id, 'tg')
     good_score = score_result['redis_user_good_answer']
     bad_score = score_result['redis_user_bad_answer']
 
@@ -72,7 +72,7 @@ def handle_give_up(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
 
     user_id = int(update.message.from_user.id)
-    redis_question = get_last_question_info(redis_connect, user_id)
+    redis_question = get_last_question_info(redis_connect, user_id, 'tg')
 
     answer = redis_question['answer']
     update.message.reply_text("Ответ на предыдущий вопрос: {}".format(answer))
@@ -89,8 +89,8 @@ def handle_report_question(update: Update, context: CallbackContext):
     redis_connect = context.bot_data['redis_connect']
     user_id = int(update.message.from_user.id)
     update.message.reply_text('На данный вопрос оставлена заявка')
-    report_question(redis_connect, user_id)
-    new_question = get_new_question(redis_connect, user_id)
+    report_question(redis_connect, user_id, 'tg')
+    new_question = get_new_question(redis_connect, user_id, 'tg')
     question = new_question['question']
     update.message.reply_text(
         "Новый вопрос: {}".format(question))
