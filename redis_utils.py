@@ -65,6 +65,25 @@ def get_last_question_info(redis_connect, user_id):
     return redis_question
 
 
+def report_question(redis_connect, user_id):
+    redis_user_id = f'user_tg_{user_id}'
+    user_data = json.loads(redis_connect.get(redis_user_id))
+    question_key = user_data['last_asked_question']
+
+    reports_key = 'reported_questions'
+    current_reports = json.loads(redis_connect.get(reports_key) or '{}')
+
+    if question_key not in current_reports:
+        current_reports[question_key] = []
+
+    if user_id not in current_reports[question_key]:
+        current_reports[question_key].append(user_id)
+
+    redis_connect.set(reports_key, json.dumps(current_reports))
+
+
+
+
 
 
 
